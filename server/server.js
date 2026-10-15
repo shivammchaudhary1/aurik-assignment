@@ -2,6 +2,9 @@ import express from 'express';
 import routes from './routes/allRoutes.js';
 const app = express();
 import { connectDb } from './config/db.js';
+import { loadEnvFile } from 'node:process';
+
+loadEnvFile('.env');
 
 app.use(express.json());
 app.use('/api', routes);

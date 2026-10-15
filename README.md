@@ -1,170 +1,199 @@
 # Aurik — Industrial Equipment Monitoring
 
-Backend-first Tech Lead take-home assessment for **Aurik Technologies**. The service receives machine events and maintenance observations from multiple vendors, normalizes them, processes jobs asynchronously, calculates explainable machine attention states, and exposes backend-facing REST APIs. An optional lightweight React dashboard demonstrates the output. All fixture data is synthetic.
+A simple **Node.js + Express + MongoDB** project for the Aurik Technologies Tech Lead take-home assessment. It receives equipment data from different vendors, converts it to a common format, processes it in the background, and reports which machines need attention. A small React dashboard is included for demonstration.
 
-## Stack
+## What the assignment asks for
 
-- **Backend:** Node.js (ES modules), Express, MongoDB and Mongoose.
-- **Validation:** Plain JavaScript.
-- **Background processing:** MongoDB-backed.
-- **Frontend (optional):** React + Vite, native `fetch`, plain CSS.
-- **Tests:** Node.js built-in test runner.
+1. **Ingest** data from at least two vendors with different JSON formats.
+2. **Normalize** machine IDs, event types, dates, values and units into one format.
+3. **Process asynchronously**, with job status, duplicate handling and errors.
+4. **Calculate machine attention** using clear, explainable rules (not machine learning).
+5. **Provide APIs** for ingestion status, individual machines, and plant/line summaries.
+6. **Document and demonstrate** the approach, trade-offs and meaningful tests.
 
-Node.js is the selected implementation stack, although the assignment brief prefers Go, Python or C#.
+This project supports three supplied vendors: **PulseForge**, **ThermexWatch**, and **MaintaFlow**.
 
-## Features
+## Tech stack
 
-- **Vendor ingestion:** Accept separate JSON formats from PulseForge, ThermexWatch and MaintaFlow. Validate batch envelopes and report malformed records without discarding valid siblings.
-- **Normalization:** Resolve machines/plants/lines from reference CSVs, map event types/severity, standardize timestamps, convert Fahrenheit to Celsius, and keep vendor IDs plus original payloads for traceability.
-- **Async jobs:** Store accepted batches in MongoDB and return HTTP `202`. Poll pending jobs in the background, record progress, and retry processing failures.
-- **Duplicate/out-of-order handling:** Unique vendor IDs and content fingerprints prevent duplicate signal insertion. Recompute operational state by event timestamps rather than message arrival order.
-- **Derived attention:** Calculate a deterministic machine-level status, attention level, reason codes, latest signals, source references and freshness. Aggregate line- and plant-level summaries.
-- **Conflicting reports:** Recovery from one sensor vendor does not erase an independent vendor's critical alert or an unresolved maintenance inspection finding.
+- **Backend:** Node.js, Express.js, MongoDB, Mongoose, JavaScript
+- **Frontend (optional):** React, Vite, CSS
+- **Validation:** Simple JavaScript checks
+- **Background processing:** MongoDB job collection and a polling worker
+- **Tests:** Node.js built-in test runner (no Jest or Supertest)
 
-## Architecture
+Node.js is used for simplicity, although the assessment mentions Go, Python and C# as preferred languages. No Docker, Redis, Swagger or additional architecture is required to run this version.
 
-```mermaid
-flowchart TD
-    V[PulseForge / ThermexWatch / MaintaFlow] --> API[Express ingestion endpoints]
-    API --> J[(MongoDB IngestionJob)]
-    J --> W[Background worker]
-    W --> N[Validate and normalize]
-    A[(Asset and line CSV references)] --> N
-    N --> S[(MongoDB Signal)]
-    S --> R[Deterministic attention rules]
-    R --> M[(MongoDB MachineState)]
-    M --> O[Machine / plant / line REST APIs]
-    O --> UI[Optional React dashboard]
-```
-
-The backend uses **MVC + a small service layer**: controllers handle HTTP, models persist records, services implement normalization and attention rules, and the worker processes jobs. The server entry point is `server/server.js`; there is no separate `app.js`.
-
-## Repository structure
+## How it works
 
 ```text
-Aurik_Tech_Lead_Assessment_Assets/    Original assessment fixtures and CSVs
-server/
-  server.js                          Express server entry point
-  config/                            MongoDB connection
-  routes/                            API routes
-  controllers/                       Request handlers
-  models/                            Mongoose schemas
-  services/                          Normalization and attention rules
-  workers/                           Background job processing
-  middleware/                        API error handling
-  utils/                             Validation and CSV parsing
-  scripts/                           Asset seed and sample import
-  tests/                             Dependency-free unit tests
-  docs/DESIGN_NOTE.md                Short design note
-client/                               Optional React + Vite dashboard
+Vendor JSON (PulseForge / ThermexWatch / MaintaFlow)
+                 |
+                 v
+         Express ingestion API
+                 |
+                 v
+      MongoDB ingestion job (pending)
+                 |
+                 v
+          Background worker
+                 |
+          Validate + normalize
+                 |
+                 v
+       MongoDB normalized signals
+                 |
+                 v
+       Calculate machine attention
+                 |
+                 v
+          Machine status APIs
+                 |
+                 v
+        React dashboard (optional)
 ```
 
-## Local setup
+**Example:** A PulseForge recovery event does not erase a separate ThermexWatch critical temperature alert or a MaintaFlow major inspection defect. The machine can still need critical attention. The result includes reasons and source event IDs so it is explainable.
 
-**Requirements:** Node.js 20+ (22 recommended), npm, MongoDB running locally. Docker Compose is not needed.
+## Project structure
 
-From the repository root:
+```text
+Aurik_Tech_Lead_Assessment_Assets/  Provided CSV, JSON and edge-case data
+server/
+  server.js                        Express entry point
+  config/                          MongoDB connection
+  models/                          Mongoose collections
+  controllers/                     HTTP handlers
+  routes/                          API routes
+  services/                        Normalization and attention rules
+  workers/                         Asynchronous processing
+  scripts/                         Reference-data and demo imports
+  tests/                           Basic unit tests
+  docs/DESIGN_NOTE.md              Detailed assumptions and trade-offs
+client/                             Simple React dashboard
+```
 
-```bash
-cd server
+The backend follows **MVC with a small service layer**. It keeps one `server.js` and does not use a separate `app.js`.
+
+## Local setup (Windows PowerShell)
+
+### Requirements
+
+Install **Node.js 20+**, **npm**, and **MongoDB Community Server**. Start MongoDB locally (its usual connection is `mongodb://127.0.0.1:27017`).
+
+### 1. Install and configure the backend
+
+From the repository directory:
+
+```powershell
+cd .\server
 npm install
-cp .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+The default settings are:
+
+```env
+PORT=5000
+MONGO_URI=mongodb://127.0.0.1:27017/aurik_monitoring
+JOB_POLL_MS=1500
+MAX_JOB_ATTEMPTS=3
+STALE_AFTER_HOURS=24
+```
+
+**Important for the currently committed `master` branch:** Before the next step, make these two small code corrections (no restructuring needed):
+
+- In `server/scripts/seed.js`, change the `Asset` and `Line` import paths to `../models/asset.model.js` and `../models/line.model.js`.
+- In `server/server.js`, import `startWorker` from `./workers/jobWorker.js` and call `startWorker()` **after** `await connectDb()`. Without it, newly submitted jobs will remain pending.
+
+### 2. Load reference and demo data
+
+Run these commands inside `server/`:
+
+```powershell
 npm run seed
 npm run demo
-npm start
 ```
 
-- Expected backend URL: `http://localhost:5000`
-- Default database URI: `mongodb://127.0.0.1:27017/aurik_monitoring`
-- Health endpoint: `GET http://localhost:5000/health`
+- `seed` imports the supplied machines and production lines.
+- `demo` ingests and processes sample vendor records.
 
-To run the optional frontend in a second terminal:
+### 3. Start the backend
 
-```bash
-cd client
+```powershell
+npm run dev
+```
+
+The API runs at **http://localhost:5000**. Visit **http://localhost:5000/health** to check that Express is running.
+
+### 4. Start the optional frontend
+
+Open a second PowerShell terminal from the repository root:
+
+```powershell
+cd .\client
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Vite proxies `/api` and `/health` to the local backend.
+Open **http://localhost:5173**. The Vite development server proxies API calls to port 5000, so no separate CORS configuration is needed for this local setup.
 
-**Important — verify before submission:** At the time of the `master` review (October 15, 2026), `server/server.js` called `cors()` without importing it and did not start the worker. Also, `server/scripts/seed.js` imports `models/Asset.js` and `models/Line.js`, while the committed model filenames are `asset.model.js` and `line.model.js`. These are known startup blockers. Fix and verify a complete local run before submitting. This repository-cleanup patch deliberately leaves your existing backend code untouched.
-
-## REST API contract
-
-All APIs use JSON.
+## API endpoints
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| GET | `/health` | Server health |
-| POST | `/api/ingest/pulseforge` | Receive PulseForge `events` batch |
-| POST | `/api/ingest/thermexwatch` | Receive ThermexWatch `readings` batch |
-| POST | `/api/ingest/maintaflow` | Receive MaintaFlow `records` batch |
-| GET | `/api/jobs/:jobId` | Processing status, counts, and issues |
-| GET | `/api/machines/:machineId/status` | Derived machine attention view |
-| GET | `/api/plants/:plantId/summary` | Plant-level machine status counts |
-| GET | `/api/plants/:plantId/lines/:lineId/summary` | Line-level status counts |
+| `GET` | `/health` | Server health check |
+| `POST` | `/api/ingest/pulseforge` | Accept PulseForge event batch |
+| `POST` | `/api/ingest/thermexwatch` | Accept ThermexWatch readings |
+| `POST` | `/api/ingest/maintaflow` | Accept MaintaFlow records |
+| `GET` | `/api/jobs/:jobId` | Check processing status and record errors |
+| `GET` | `/api/machines/:machineId/status` | Get a machine's derived attention status |
+| `GET` | `/api/plants/:plantId/summary` | Get plant-level summary |
+| `GET` | `/api/plants/:plantId/lines/:lineId/summary` | Get line-level summary |
 
-### Sample ingestion
+A successful ingestion request returns **202 Accepted** with a `job_id`. Poll the job endpoint for `completed`, `partial` or `failed`.
 
-```bash
-curl -X POST http://localhost:5000/api/ingest/pulseforge \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "vendor": "PulseForge",
-    "plant_id": "PLANT_01",
-    "events": [{
-      "event_id": "PF-1001",
-      "machine_id": "EQ-001",
-      "line_id": "LINE-A",
-      "event_time": "2026-04-18T07:59:12Z",
-      "event_type": "HIGH_VIBRATION",
-      "severity": "high",
-      "vibration_mm_s": 11.8,
-      "temperature_c": 83.2,
-      "machine_state": "running",
-      "sensor_health": 0.91,
-      "vendor_confidence": 0.87
-    }]
-  }'
+## Quick manual testing (PowerShell)
+
+With the backend running, open another terminal:
+
+```powershell
+# API and machine summary
+Invoke-RestMethod http://localhost:5000/health
+Invoke-RestMethod http://localhost:5000/api/machines/EQ-008/status
+Invoke-RestMethod http://localhost:5000/api/plants/PLANT_02/summary
+
+# Ingest the supplied PulseForge JSON sample
+$payload = Get-Content .\Aurik_Tech_Lead_Assessment_Assets\vendor_api_samples\pulseforge_sample.json -Raw
+$job = Invoke-RestMethod -Uri http://localhost:5000/api/ingest/pulseforge -Method Post -ContentType 'application/json' -Body $payload
+Start-Sleep -Seconds 3
+Invoke-RestMethod "http://localhost:5000/api/jobs/$($job.job_id)"
 ```
 
-A valid batch is accepted with HTTP `202`, a `job_id`, record count, and status URL. Poll `GET /api/jobs/:jobId` for `completed`, `partial` or `failed`; valid siblings can succeed even if another record is malformed. The machine endpoint returns machine/plant/line IDs, operational status, whether attention is required, severity, reason codes, processing status/freshness and source event references.
+The last block assumes the terminal is in the **repository root**. You may see a nonzero duplicate count if the demo data was already imported.
 
-### Sample read requests
+The provided `vendor_api_samples/` directory also contains `duplicates.json`, `malformed.json`, `out_of_order.json`, `conflicting_updates.json` and `retry_cases.json` for additional manual checking. For mixed-vendor files, submit each vendor's nested JSON object to that vendor's endpoint.
 
-```bash
-curl http://localhost:5000/api/machines/EQ-008/status
-curl http://localhost:5000/api/plants/PLANT_02/summary
-curl http://localhost:5000/api/plants/PLANT_02/lines/LINE-E/summary
-```
+The brief also requires meaningful tests. The existing built-in tests can be run from `server/`:
 
-## Testing and manual review
-
-The assessment specifically requires **meaningful tests**, so the repository keeps its existing lightweight Node.js unit test, with no testing-framework dependency:
-
-```bash
-cd server
+```powershell
 npm test
 ```
 
-The original asset folder contains `vendor_api_samples/happy_path.json`, `duplicates.json`, `malformed.json`, `out_of_order.json`, `conflicting_updates.json` and `retry_cases.json`. Submit each vendor-specific child of a mixed-vendor JSON fixture to the matching endpoint to exercise those scenarios. The local seed/demo commands use the provided reference and event CSVs. April 2026 fixture data may appear stale at runtime; data freshness does not automatically mean that a machine's safety issue has been resolved.
+## Design choices and limitations
 
-## Assumptions and trade-offs
+- Each vendor uses different field names and formats; the normalization service maps them to one common signal model.
+- Valid records in a batch can be processed even if another record is malformed.
+- Source IDs and fingerprints are used to recognize duplicates and conflicting updates.
+- Events are ordered by their timestamps when machine state is calculated.
+- Fahrenheit is converted to Celsius; vibration acceleration (`g`) is **not** treated as the same unit as vibration velocity (`mm/s`).
+- Machine attention is calculated using explicit rules and returned with reason codes and source references.
+- MongoDB polling keeps the implementation small. A production system would need stronger worker coordination and observability.
+- The supplied data is from April 2026, so freshness indicators may report **stale** when tested later.
 
-- **Vendor schema:** Version `v1` is supported. Vendor event IDs are treated as immutable; changed data with an existing ID is a conflict rather than an implicit correction.
-- **Units:** Fahrenheit converts to Celsius; vibration acceleration (`g`) is not directly converted to vibration velocity (`mm/s`).
-- **Time zones:** MaintaFlow timestamps without a zone are interpreted as UTC.
-- **Operational decisions:** Recovery is source-scoped. Independent critical temperature or inspection findings remain actionable.
-- **Simplicity:** A MongoDB polling worker avoids extra services for a small assessment, but lacks production-grade lease renewal and distributed worker coordination.
-- **Limitations:** No tenant authorization, rate limits, structured monitoring, deployment pipeline, or production correction/versioning flow.
+**Production next steps:** Stronger vendor authentication, rate limiting, monitoring/logging, better retry and dead-letter handling, worker lease renewal, integration testing, and deployment automation.
 
-See [`server/docs/DESIGN_NOTE.md`](server/docs/DESIGN_NOTE.md) for additional implementation decisions and production trade-offs.
-
-## What I would do next for production
-
-Add automated end-to-end verification with MongoDB, secure vendor authentication, API rate limits, structured logs and metrics, worker heartbeat/lease renewal, dead-letter redrive, safe concurrent machine-state updates, migration/versioning support, and deployment automation. A dedicated queue could be added only if load requires it.
+See [`server/docs/DESIGN_NOTE.md`](server/docs/DESIGN_NOTE.md) for the short design note required by the assessment.
 
 ## AI usage disclosure
 
-**OpenAI ChatGPT** was used to assist with backend/frontend code drafts, code review, and documentation. The candidate chose Node.js/Express/Mongoose and requested a simple MVC structure with plain JavaScript validation and minimal infrastructure. The candidate remains responsible for independently reviewing, running, explaining, and defending the submission.
+OpenAI ChatGPT was used to help draft implementation code, review issues, and prepare documentation. The choice of a simple Node.js/Express/Mongoose stack and the final engineering decisions should be reviewed and explained by the candidate.
