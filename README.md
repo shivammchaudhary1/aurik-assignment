@@ -5,10 +5,10 @@ Backend-first Tech Lead take-home assessment for **Aurik Technologies**. The ser
 ## Stack
 
 - **Backend:** Node.js (ES modules), Express, MongoDB and Mongoose.
-- **Validation:** Plain JavaScript (no Zod).
-- **Background processing:** MongoDB-backed job polling (no Redis or external queue).
+- **Validation:** Plain JavaScript.
+- **Background processing:** MongoDB-backed.
 - **Frontend (optional):** React + Vite, native `fetch`, plain CSS.
-- **Tests:** Node.js built-in test runner (no Jest or Supertest).
+- **Tests:** Node.js built-in test runner.
 
 Node.js is the selected implementation stack, although the assignment brief prefers Go, Python or C#.
 
