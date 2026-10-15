@@ -1,5 +1,3 @@
-// During Vite development /api and /health are proxied to localhost:5000.
-// For a separately hosted frontend, define VITE_API_BASE_URL (no trailing slash).
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 export async function getJson(path, options = {}) {
@@ -11,7 +9,9 @@ export async function getJson(path, options = {}) {
     });
   } catch (error) {
     if (error.name === 'AbortError') throw error;
-    throw new Error('Cannot connect to backend. Start MongoDB and the server on port 5000.');
+    throw new Error(
+      'Cannot connect to backend. Start MongoDB and the server on port 5000.'
+    );
   }
 
   const body = await response.json().catch(() => null);
