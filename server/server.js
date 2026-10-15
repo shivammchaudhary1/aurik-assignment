@@ -4,7 +4,6 @@ const app = express();
 import { connectDb } from './config/db.js';
 
 app.use(express.json());
-app.use(cors());
 app.use('/api', routes);
 
 app.get('/health', (req, res) =>
